@@ -1,18 +1,16 @@
 const express = require('express');
 const mysql = require('mysql');
-const cors = require('cors'); // Import the CORS module
+const cors = require('cors'); 
 
 const app = express();
 const port = 5000;
 
-// Use CORS middleware
 app.use(cors({
-  origin: 'http://localhost:3000', // Replace with your frontend URL
+  origin: 'http://localhost:3000', 
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type'],
 }));
 
-// MySQL Connection
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
@@ -20,7 +18,6 @@ const db = mysql.createConnection({
   database: 'reparations'
 });
 
-// Connect to MySQL
 db.connect((err) => {
   if (err) {
     console.error('Error connecting to MySQL:', err);
@@ -29,10 +26,9 @@ db.connect((err) => {
   console.log('MySQL Connected...');
 });
 
-// API endpoint to fetch data from MySQL
 app.get('/api/data', async (req, res) => {
   try {
-    const sql = 'SELECT * FROM client';
+    const sql = 'SELECT * FROM client JOIN reparation on client.client_id = reparation.reparation_client_id';
     const result = await query(sql);
     res.json(result);
   } catch (err) {
@@ -41,7 +37,23 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-// Utility function to execute MySQL queries with Promises
+app.get('/api/data/:id', async (req, res) => {
+  const { id } = req.params; 
+  try {
+    const sql = `SELECT * FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id WHERE reparation.reparation_id = ${id}`;
+    const result = await query(sql);
+    if (result.length === 0) {
+      res.status(404).json({ error: 'Réparation non trouvée' });
+    } else {
+      res.json(result[0]);
+    }
+  } catch (err) {
+    console.error('Erreur lors de la récupération de la réparation depuis MySQL:', err);
+    res.status(500).json({ error: 'Erreur lors de la récupération de la réparation depuis MySQL' });
+  }
+});
+
+
 const query = (sql) => {
   return new Promise((resolve, reject) => {
     db.query(sql, (err, result) => {
@@ -54,7 +66,6 @@ const query = (sql) => {
   });
 };
 
-// Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
