@@ -11,6 +11,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type'],
 }));
 
+app.use(express.json());
+
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
@@ -37,6 +39,18 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
+app.get('/api/fetchClients', async (req, res) => {
+  try {
+    const sql = 'SELECT * FROM client';
+    const result = await query(sql);
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching data from MySQL:', err);
+    res.status(500).json({ error: 'Error fetching data from MySQL' });
+  }
+});
+
+
 app.get('/api/data/:id', async (req, res) => {
   const { id } = req.params; 
   try {
@@ -52,6 +66,57 @@ app.get('/api/data/:id', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la récupération de la réparation depuis MySQL' });
   }
 });
+
+app.post('/api/clients', async (req, res) => {
+  try {
+    const { nom, email } = req.body;
+    const emailRegex = /\A[^@\s]+@([^@\s]+\.)+[^@\s]+\z/;
+    if (!nom || !email || !emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Le nom et l\'adresse email valides sont obligatoires' });
+    }
+    const sql = `INSERT INTO client (client_nom, client_email) VALUES ('${nom}', '${email}')`;
+    await query(sql);
+    res.status(201).json({ message: 'Client ajouté avec succès', client: { nom, email } });
+  } catch (err) {
+    console.error('Erreur lors de l\'ajout du client à MySQL :', err);
+    res.status(500).json({ error: 'Erreur lors de l\'ajout du client à MySQL. Veuillez réessayer plus tard.' });
+  }
+});
+
+app.post('/api/reparations', async (req, res) => {
+  try {
+    const { idClient, appareil, description } = req.body;
+    if (!idClient || isNaN(idClient) || idClient <= 0) {
+      return res.status(400).json({ error: 'L\'identifiant du client doit être un nombre entier positif' });
+    }
+    const clientExists = await checkClientExists(idClient);
+    if (!clientExists) {
+      return res.status(404).json({ error: `Le client avec l'id ${idClient} n'existe pas. Veuillez vérifier l'identifiant du client.` });
+    }
+    const dateDepot = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const sql = `INSERT INTO reparation (reparation_client_id, reparation_appareil, reparation_description, reparation_statut, reparation_date_depot)
+                 VALUES ('${idClient}', '${appareil}', '${description}', 'À faire', '${dateDepot}')`;
+    await query(sql);
+    res.status(201).json({ message: 'Réparation ajoutée avec succès', idClient, appareil, description, dateDepot });
+  } catch (err) {
+    console.error('Erreur lors de l\'ajout de la réparation à MySQL :', err);
+    res.status(500).json({ error: 'Erreur lors de l\'ajout de la réparation à MySQL. Veuillez réessayer plus tard.' });
+  }
+});
+
+
+const checkClientExists = (clientId) => {
+  return new Promise((resolve, reject) => {
+    const sql = `SELECT client_id FROM client WHERE client_id = ${clientId}`;
+    db.query(sql, (err, result) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(result.length > 0);
+      }
+    });
+  });
+};
 
 
 const query = (sql) => {
