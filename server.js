@@ -89,6 +89,9 @@ app.post('/api/reparations', async (req, res) => {
     if (!idClient || isNaN(idClient) || idClient <= 0) {
       return res.status(400).json({ error: 'L\'identifiant du client doit être un nombre entier positif' });
     }
+    if (!appareil || !description) {
+      return res.status(400).json({ error: 'L\'appareil et la description sont obligatoires' });
+    }
     const clientExists = await checkClientExists(idClient);
     if (!clientExists) {
       return res.status(404).json({ error: `Le client avec l'id ${idClient} n'existe pas. Veuillez vérifier l'identifiant du client.` });
