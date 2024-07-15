@@ -70,7 +70,7 @@ app.get('/api/data/:id', async (req, res) => {
 app.post('/api/clients', async (req, res) => {
   try {
     const { nom, email } = req.body;
-    const emailRegex = /\A[^@\s]+@([^@\s]+\.)+[^@\s]+\z/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!nom || !email || !emailRegex.test(email)) {
       return res.status(400).json({ error: 'Le nom et l\'adresse email valides sont obligatoires' });
     }
