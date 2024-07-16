@@ -122,6 +122,19 @@ app.put('/api/updateReparation/:repairId', async (req, res) => {
   }
 });
 
+app.post('/api/filterRepair', async (req, res) => {
+  const { statut } = req.body;
+  try {
+    const sql = 'SELECT * FROM reparation JOIN client on reparation_client_id = client_id WHERE reparation_statut = ?';
+    const result = await db.promise().query(sql, [statut]);
+    res.json(result[0]);
+  } catch (err) {
+    console.error('Erreur lors du filtrage des réparations depuis MySQL:', err);
+    res.status(500).json({ error: 'Erreur lors du filtrage des réparations depuis MySQL' });
+  }
+});
+
+
 const checkClientExists = async (clientId) => {
   try {
     const sql = 'SELECT client_id FROM client WHERE client_id = ?';
