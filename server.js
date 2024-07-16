@@ -1,13 +1,13 @@
 const express = require('express');
-const mysql = require('mysql');
-const cors = require('cors'); 
+const mysql = require('mysql2');
+const cors = require('cors');
 
 const app = express();
 const port = 5000;
 
 app.use(cors({
-  origin: 'http://localhost:3000', 
-  methods: ['GET', 'POST'],
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT'],
   allowedHeaders: ['Content-Type'],
 }));
 
@@ -28,10 +28,10 @@ db.connect((err) => {
   console.log('MySQL Connected...');
 });
 
-app.get('/api/data', async (req, res) => {
+app.get('/api/reparations', async (req, res) => {
   try {
-    const sql = 'SELECT * FROM client JOIN reparation on client.client_id = reparation.reparation_client_id';
-    const result = await query(sql);
+    const sql = 'SELECT * FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id';
+    const [result] = await db.promise().query(sql);
     res.json(result);
   } catch (err) {
     console.error('Error fetching data from MySQL:', err);
@@ -39,10 +39,10 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-app.get('/api/fetchClients', async (req, res) => {
+app.get('/api/clients', async (req, res) => {
   try {
     const sql = 'SELECT * FROM client';
-    const result = await query(sql);
+    const [result] = await db.promise().query(sql);
     res.json(result);
   } catch (err) {
     console.error('Error fetching data from MySQL:', err);
@@ -50,12 +50,11 @@ app.get('/api/fetchClients', async (req, res) => {
   }
 });
 
-
-app.get('/api/data/:id', async (req, res) => {
-  const { id } = req.params; 
+app.get('/api/reparations/:id', async (req, res) => {
+  const { id } = req.params;
   try {
-    const sql = `SELECT * FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id WHERE reparation.reparation_id = ${id}`;
-    const result = await query(sql);
+    const sql = 'SELECT * FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id WHERE reparation.reparation_id = ?';
+    const [result] = await db.promise().query(sql, [id]);
     if (result.length === 0) {
       res.status(404).json({ error: 'Réparation non trouvée' });
     } else {
@@ -67,15 +66,15 @@ app.get('/api/data/:id', async (req, res) => {
   }
 });
 
-app.post('/api/clients', async (req, res) => {
+app.post('/api/addClients', async (req, res) => {
   try {
     const { nom, email } = req.body;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!nom || !email || !emailRegex.test(email)) {
       return res.status(400).json({ error: 'Le nom et l\'adresse email valides sont obligatoires' });
     }
-    const sql = `INSERT INTO client (client_nom, client_email) VALUES ('${nom}', '${email}')`;
-    await query(sql);
+    const sql = 'INSERT INTO client (client_nom, client_email) VALUES (?, ?)';
+    await db.promise().query(sql, [nom, email]);
     res.status(201).json({ message: 'Client ajouté avec succès', client: { nom, email } });
   } catch (err) {
     console.error('Erreur lors de l\'ajout du client à MySQL :', err);
@@ -83,8 +82,9 @@ app.post('/api/clients', async (req, res) => {
   }
 });
 
-app.post('/api/reparations', async (req, res) => {
+app.post('/api/addReparations', async (req, res) => {
   try {
+    const statut = "À faire";
     const { idClient, appareil, description } = req.body;
     if (!idClient || isNaN(idClient) || idClient <= 0) {
       return res.status(400).json({ error: 'L\'identifiant du client doit être un nombre entier positif' });
@@ -97,41 +97,40 @@ app.post('/api/reparations', async (req, res) => {
       return res.status(404).json({ error: `Le client avec l'id ${idClient} n'existe pas. Veuillez vérifier l'identifiant du client.` });
     }
     const dateDepot = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const sql = `INSERT INTO reparation (reparation_client_id, reparation_appareil, reparation_description, reparation_statut, reparation_date_depot)
-                 VALUES ('${idClient}', '${appareil}', '${description}', 'À faire', '${dateDepot}')`;
-    await query(sql);
-    res.status(201).json({ message: 'Réparation ajoutée avec succès', idClient, appareil, description, dateDepot });
+    const sql = 'INSERT INTO reparation (reparation_client_id, reparation_appareil, reparation_description, reparation_statut, reparation_date_depot) VALUES (?, ?, ?, ?, ?)';
+    await db.promise().query(sql, [idClient, appareil, description, statut, dateDepot]);
+    res.status(201).json({ message: 'Réparation ajoutée avec succès', idClient, appareil, description, statut, dateDepot });
   } catch (err) {
     console.error('Erreur lors de l\'ajout de la réparation à MySQL :', err);
     res.status(500).json({ error: 'Erreur lors de l\'ajout de la réparation à MySQL. Veuillez réessayer plus tard.' });
   }
 });
 
+app.put('/api/updateReparation/:repairId', async (req, res) => {
+  const { repairId } = req.params;
+  try {
+    const { appareil, description, statut } = req.body;
+    if (!appareil || !description || !statut) {
+      return res.status(400).json({ error: 'L\'appareil, le statut et la description sont obligatoires' });
+    }
+    const sql = 'UPDATE reparation SET reparation_appareil = ?, reparation_description = ?, reparation_statut = ? WHERE reparation_id = ?';
+    await db.promise().query(sql, [appareil, description, statut, repairId]);
+    res.status(200).json({ message: 'Réparation mise à jour avec succès', appareil, description, statut });
+  } catch (err) {
+    console.error('Erreur lors de la mise à jour réparation à MySQL :', err);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour de la réparation à MySQL. Veuillez réessayer plus tard.' });
+  }
+});
 
-const checkClientExists = (clientId) => {
-  return new Promise((resolve, reject) => {
-    const sql = `SELECT client_id FROM client WHERE client_id = ${clientId}`;
-    db.query(sql, (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(result.length > 0);
-      }
-    });
-  });
-};
-
-
-const query = (sql) => {
-  return new Promise((resolve, reject) => {
-    db.query(sql, (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+const checkClientExists = async (clientId) => {
+  try {
+    const sql = 'SELECT client_id FROM client WHERE client_id = ?';
+    const [result] = await db.promise().query(sql, [clientId]);
+    return result.length > 0;
+  } catch (err) {
+    console.error('Erreur lors de la vérification de l\'existence du client :', err);
+    throw err;
+  }
 };
 
 app.listen(port, () => {
