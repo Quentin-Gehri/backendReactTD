@@ -30,7 +30,7 @@ db.connect((err) => {
 
 app.get('/api/reparations', async (req, res) => {
   try {
-    const sql = 'SELECT * FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id';
+    const sql = 'SELECT client_id, client_nom, client_email, reparation_id, reparation_appareil, reparation_description, reparation_statut, reparation_date_depot FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id';
     const [result] = await db.promise().query(sql);
     res.json(result);
   } catch (err) {
@@ -41,7 +41,7 @@ app.get('/api/reparations', async (req, res) => {
 
 app.get('/api/clients', async (req, res) => {
   try {
-    const sql = 'SELECT * FROM client';
+    const sql = 'SELECT client_id, client_nom, client_email FROM client';
     const [result] = await db.promise().query(sql);
     res.json(result);
   } catch (err) {
@@ -53,7 +53,7 @@ app.get('/api/clients', async (req, res) => {
 app.get('/api/reparations/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const sql = 'SELECT * FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id WHERE reparation.reparation_id = ?';
+    const sql = 'SELECT reparation_id, reparation_appareil, reparation_description, reparation_statut FROM client JOIN reparation ON client.client_id = reparation.reparation_client_id WHERE reparation.reparation_id = ?';
     const [result] = await db.promise().query(sql, [id]);
     if (result.length === 0) {
       res.status(404).json({ error: 'Réparation non trouvée' });
@@ -71,16 +71,22 @@ app.post('/api/addClients', async (req, res) => {
     const { nom, email } = req.body;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!nom || !email || !emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Le nom et l\'adresse email valides sont obligatoires' });
+      return res.status(400).json({ error: 'Le nom et une adresse email valide sont obligatoires' });
     }
-    const sql = 'INSERT INTO client (client_nom, client_email) VALUES (?, ?)';
-    await db.promise().query(sql, [nom, email]);
+    const checkEmailSql = 'SELECT client_id FROM client WHERE client_email = ?';
+    const [existingClient] = await db.promise().query(checkEmailSql, [email]);
+    if (existingClient.length > 0) {
+      return res.status(400).json({ error: 'Cette adresse email est déjà utilisée' });
+    }
+    const insertSql = 'INSERT INTO client (client_nom, client_email) VALUES (?, ?)';
+    await db.promise().query(insertSql, [nom, email]);
     res.status(201).json({ message: 'Client ajouté avec succès', client: { nom, email } });
   } catch (err) {
     console.error('Erreur lors de l\'ajout du client à MySQL :', err);
     res.status(500).json({ error: 'Erreur lors de l\'ajout du client à MySQL. Veuillez réessayer plus tard.' });
   }
 });
+
 
 app.post('/api/addReparations', async (req, res) => {
   try {
@@ -94,7 +100,7 @@ app.post('/api/addReparations', async (req, res) => {
     }
     const clientExists = await checkClientExists(idClient);
     if (!clientExists) {
-      return res.status(404).json({ error: `Le client avec l'id ${idClient} n'existe pas. Veuillez vérifier l'identifiant du client.` });
+      return res.status(404).json({ error: `Le client n'existe pas` });
     }
     const dateDepot = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const sql = 'INSERT INTO reparation (reparation_client_id, reparation_appareil, reparation_description, reparation_statut, reparation_date_depot) VALUES (?, ?, ?, ?, ?)';
@@ -106,7 +112,7 @@ app.post('/api/addReparations', async (req, res) => {
   }
 });
 
-app.put('/api/updateReparation/:repairId', async (req, res) => {
+app.put('/api/updateReparation/:repairId', async (req, res) => { 
   const { repairId } = req.params;
   try {
     const { appareil, description, statut } = req.body;
@@ -125,7 +131,7 @@ app.put('/api/updateReparation/:repairId', async (req, res) => {
 app.post('/api/filterRepair', async (req, res) => {
   const { statut } = req.body;
   try {
-    const sql = 'SELECT * FROM reparation JOIN client on reparation_client_id = client_id WHERE reparation_statut = ?';
+    const sql = 'SELECT reparation_id, reparation_appareil, reparation_description, reparation_statut FROM reparation JOIN client on reparation_client_id = client_id WHERE reparation_statut = ?';
     const result = await db.promise().query(sql, [statut]);
     res.json(result[0]);
   } catch (err) {
@@ -133,7 +139,6 @@ app.post('/api/filterRepair', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors du filtrage des réparations depuis MySQL' });
   }
 });
-
 
 const checkClientExists = async (clientId) => {
   try {
